@@ -1,49 +1,65 @@
-var main = function () {
-  log("Enter main()");
+const main = () => {
+  const log = (message) => {
+    // customize logging
+    console.info('CRB: ' + message);
+  };
 
-  var SUPPORTED_VIEWS = [
-    "Activity since last statement",
-    "All transactions",
-    "Year to date",
-  ];
-  var getActivityTable = () =>
-    $ ? $("#activityTablesingleOVDAccountActivity") : null;
+  const amountToNumber = (text) => {
+    // parse about string to value
+    // remove dollar sign
+    // recognize negative value
+    return parseFloat(text.replace('\u2212', '-').replace(/[$,]+/g, ''));
+  };
 
-  var runs = 0;
+  // which versions of the activity table are considered
+  const SUPPORTED_VIEWS = ['Activity since last statement', 'All transactions', 'Year to date'];
 
-  var intervalId = setInterval(function () {
+  // get activity table
+  const getActivityTable = () => {
+    return document.querySelector('#activityTablesingleOVDAccountActivity');
+  };
+
+  log('Enter main()');
+
+  // init cycle count
+  let runs = 0;
+
+  // cycle for reasonable loading time
+  const intervalId = setInterval(() => {
+    // increment cycle count
     runs++;
 
     // Give up if activity table has not loaded in 10 seconds.
     if (runs > 100) {
-      log("Clear interval (table missing)");
+      log('Clear interval too many cycles');
       clearInterval(intervalId);
       return;
     }
 
-    // Return early while waiting for jQuery to load.
-    if (typeof $ !== "function") {
-      return;
-    }
-
-    function loadMoreTransactionsOrRenderBalance() {
-      const seeMore$ = $("#seeMore");
-      if (seeMore$.length) {
+    // check if more transactions can be loaded
+    const loadMoreTransactionsOrRenderBalance = () => {
+      const seeMore = document.querySelector('#seeMore');
+      if (seeMore !== null) {
         // keep loading those table rows
-        seeMore$.click();
+        seeMore.click();
       } else {
         displayRunningBalance();
       }
-    }
+    };
+
     // Configure MutationObserver and try to display running balance.
-    var table = getActivityTable();
-    if (table.length > 0) {
+    const table = getActivityTable();
+    if (table === null) {
+      // try again later
+      return;
+    } else if (table.rows.length > 0) {
+      // render running balance
       loadMoreTransactionsOrRenderBalance();
 
-      log("Configure MutationObserver");
-      var observer = new MutationObserver(loadMoreTransactionsOrRenderBalance);
-
-      observer.observe(table[0], {
+      // setup to render running balance on change
+      log('Configure MutationObserver');
+      let observer = new MutationObserver(loadMoreTransactionsOrRenderBalance);
+      observer.observe(table, {
         attributes: true,
         subtree: true,
       });
@@ -52,91 +68,90 @@ var main = function () {
       return;
     }
 
-    log("Clear interval");
+    log('Clear interval');
     clearInterval(intervalId);
   }, 100);
 
-  function displayRunningBalance() {
-    log("Enter displayRunningBalance()");
+  const displayRunningBalance = () => {
+    log('Enter displayRunningBalance()');
 
     // Remove Balance column if it already exists.
-    $(".running-balance-ext").remove();
+    const runningBalExt = document.querySelectorAll('.running-balance-ext');
+    Array.prototype.forEach.call(runningBalExt, (node) => {
+      node.parentNode.removeChild(node);
+    });
 
     // Find the account activity table (exclude pending transactions)
-    var activityTable = getActivityTable();
+    const activityTable = getActivityTable();
 
     // Get transaction history.
-    var transactions = activityTable.find("tbody tr").get();
+    const transactions = activityTable.rows;
 
     // Return early while waiting for transaction history to load.
     if (transactions.length == 0) {
-      log("No transactions");
+      log('No transactions');
       return;
     }
 
     // Return early if an unsupported view is active.
-    var currentViewName = $(
-      "#header-transactionTypeOptions .header-text"
-    ).text();
+    let currentViewName = document.querySelector('#header-transactionTypeOptions .header-text');
+    if (currentViewName !== null) {
+      currentViewName = currentViewName.innerHTML;
+    }
     if (!SUPPORTED_VIEWS.includes(currentViewName)) {
-      log("Unsupported view");
+      log('Unsupported view');
       return;
     }
 
     // Add Balance column.
-    activityTable
-      .find("thead tr th.amount")
-      .after(
-        '<th class="amount running-balance-ext"><span class="TABLEHEADER">Balance</span></th>'
-      );
+    let balanceColumn = document.createElement('th');
+    balanceColumn.classList.add('amount', 'running-balance-ext');
 
-    const currentValue = $(".current-balance-value").text();
+    let balanceSpan = document.createElement('span');
+    balanceSpan.className = 'TABLEHEADER';
+    balanceSpan.innerHTML = 'Balance';
+    balanceColumn.appendChild(balanceSpan);
+
+    activityHeaders = activityTable.querySelector('.column-headers');
+    activityHeaders.insertBefore(balanceColumn, activityHeaders.querySelector('.amount').nextSibling);
 
     // Find current balance and use it as running balance.
-    // The following ID exists on the page if the user has more than one credit card.
-    var runningBalance = amountToNumber(currentValue);
-
-    // The following ID exists on the page if the user has only one credit card.
-    if (isNaN(runningBalance)) {
-      runningBalance = amountToNumber($("#accountCurrentBalanceValue").text());
-    }
+    const currentValue = document.querySelector('.current-balance-value').innerHTML;
+    let runningBalance = amountToNumber(currentValue);
 
     if (isNaN(runningBalance)) {
-      log("Unable to determine current balance");
+      log('Unable to determine current balance');
+      // continue, results in NaN values
     }
 
-    log("Calculate and display running balance");
+    log('Calculate and display running balance');
 
     // Calculate and display running balance for each transaction.
-    $(transactions).each(function () {
+    for (const element of transactions) {
+      // skip column headers (first row included)
+      if (element.classList.contains('column-headers')) {
+        continue;
+      }
       // Clone an Amount cell to easily create a similar-looking Balance cell.
-      var balanceCell = $(this).find("td.amount").clone();
-      balanceCell.addClass("running-balance-ext");
-      balanceCell
-        .find("span")
-        .text(
-          "$" +
-            runningBalance.toLocaleString("en-US", { minimumFractionDigits: 2 })
-        );
-      balanceCell.insertBefore($(this).find("td.util"));
+      let balanceCell = element.querySelector('.amount');
+      if (balanceCell !== null) {
+        balanceCell = balanceCell.cloneNode();
+      } else {
+        // no amount element
+        continue;
+      }
+      // add classes and running balance as text
+      balanceCell.classList.add('amount', 'running-balance-ext');
+      balanceCell.innerHTML = '$' + runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 });
+      // insert running balance element
+      element.insertBefore(balanceCell, element.querySelector('.amount').nextSibling);
 
-      var transactionAmount = amountToNumber(
-        $(this).find(".amount").first().text()
-      );
+      // update runningBalence for next loop (will pull first element with class .amount)
+      amountSpan = element.querySelector('.amount');
+      const transactionAmount = amountToNumber(amountSpan.querySelector('.column-info').innerHTML);
       runningBalance -= transactionAmount;
-    });
-  }
-
-  function amountToNumber(text) {
-    return parseFloat(text.replace("\u2212", "-").replace(/[$,]+/g, ""));
-  }
-
-  function log(message) {
-    console.info("CRB: " + message);
-  }
+    }
+  };
 };
 
-var script = document.createElement("script");
-script.type = "text/javascript";
-script.textContent = "(" + main.toString() + ")();";
-document.body.appendChild(script);
+main();
